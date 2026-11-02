@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const requireAuth = require('./middleware/requireAuth');
-// const requireRole = require('./middleware/requireRole'); // TODO: use this for the role gates
+const requireRole = require('./middleware/requireRole');
 const { signToken } = require('./utils/jwt');
 const { users } = require('./data');
 const postsRouter = require('./routes/posts');
@@ -24,8 +24,8 @@ app.use(requireAuth);
 app.use('/posts', postsRouter);
 
 // DELETE /users/:id — should be admin only.
-// TODO: gate this route with requireRole('admin').
-app.delete('/users/:id', (req, res) => {
+// Gate this route with requireRole('admin').
+app.delete('/users/:id', requireRole('admin'), (req, res) => {
   const idx = users.findIndex((u) => u.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
   users.splice(idx, 1);
