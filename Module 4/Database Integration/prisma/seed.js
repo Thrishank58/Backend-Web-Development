@@ -29,6 +29,14 @@ async function main() {
     });
   }
 
+  // Ensure PostgreSQL autoincrement sequence is in sync with highest seeded ID
+  await prisma.$executeRawUnsafe(
+    'SELECT setval(pg_get_serial_sequence(\'"Post"\', \'id\'), COALESCE(MAX(id), 1)) FROM "Post"'
+  );
+  await prisma.$executeRawUnsafe(
+    'SELECT setval(pg_get_serial_sequence(\'"User"\', \'id\'), COALESCE(MAX(id), 1)) FROM "User"'
+  );
+
   console.log('Seed complete – created user and 2 sample posts.');
 }
 
