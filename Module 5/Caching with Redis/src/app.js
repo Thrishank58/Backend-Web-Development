@@ -10,7 +10,7 @@ require('dotenv').config();
 
 const express = require('express');
 const db      = require('./db');
-// TODO: import { cacheGet, cacheSet, cacheDel } from './cache'
+const { cacheGet, cacheSet, cacheDel } = require('./cache');
 
 const app = express();
 app.use(express.json());
@@ -20,15 +20,21 @@ const FEED_TTL = 60;   // seconds
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-// GET /feed — currently queries the database on EVERY request (no caching).
-// TODO: wrap with cache-aside:
-//   1. cacheGet(FEED_KEY) → if hit, set X-Cache: HIT, log, return
-//   2. on miss: query db, cacheSet(FEED_KEY, posts, FEED_TTL), set X-Cache: MISS, log, return
+// GET /feed — cache-aside with 60s TTL and X-Cache header.
 app.get('/feed', async (req, res) => {
   try {
     const t0 = Date.now();
+    const cached = await cacheGet(FEED_KEY);
+    if (cached !== null) {
+      res.set('X-Cache', 'HIT');
+      console.log(`[feed] HIT ${Date.now() - t0}ms`);
+      return res.json(cached);
+    }
+
     const posts = await db.getTrendingPosts();
-    console.log(`[feed] DB  ${Date.now() - t0}ms`);   // replace with HIT/MISS logging
+    await cacheSet(FEED_KEY, posts, FEED_TTL);
+    res.set('X-Cache', 'MISS');
+    console.log(`[feed] MISS ${Date.now() - t0}ms`);
     res.json(posts);
   } catch (err) {
     console.error('[feed] error:', err);
@@ -36,12 +42,11 @@ app.get('/feed', async (req, res) => {
   }
 });
 
-// POST /posts — creates a new post.
-// TODO: call cacheDel(FEED_KEY) after db.createPost() to invalidate the stale cache.
+// POST /posts — creates a new post and invalidates cached feed.
 app.post('/posts', async (req, res) => {
   try {
     const post = await db.createPost(req.body);
-    // TODO: await cacheDel(FEED_KEY);
+    await cacheDel(FEED_KEY);
     res.status(201).json(post);
   } catch (err) {
     console.error('[posts] error:', err);
